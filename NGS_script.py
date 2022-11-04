@@ -7,7 +7,7 @@
 # 2 fastq files: forward and reverse
 # a reference fasta file for alignment
 
-# The pipeline contains following software: fastqc, trimmomatic, spades, quast, bwa, samtools and snpEff
+# The pipeline contains following softwares: fastqc, trimmomatic, spades, quast, bwa, gatk and snpEff
 # The outcome are stored in 4 directories:
 # fastqc results -> C.para_fastqc
 # quast results -> C.para_quast
@@ -57,7 +57,9 @@ def quast(dep=''):
 
 
 def alignment(dep=''):
-    command = "bwa mem -t 8 {} {}_R1_paired.fastq.gz {}_R2_paired.fastq.gz > {}.sam".format(ref, sample_id, sample_id, sample_id)
+    # GATK requires readgroup information
+    rg = '@RG\tID:group_n\tLB:library_n\tPL:illumina\tPU:unit1\tSM:sample_n'
+    command = "bwa mem -R {} -t 8 {} {}_R1_paired.fastq.gz {}_R2_paired.fastq.gz > {}.sam".format(rg, ref, sample_id, sample_id, sample_id)
     job_id = sbatch('align', command, time=8, mem=120, dep=dep)
     return job_id
 
@@ -74,22 +76,23 @@ def sort(dep=''):
     return job_id
 
 
-def variant(dep=''):
-    command = "bcftools mpileup -f {}.fasta {}.sorted.bam -o {}.raw.bcf".format(ref, sample_id, sample_id)
-    job_id = sbatch('variant', command, dep=dep)
+def markduplicates(dep=''):
+    command = "gatk MarkDuplicates -I {}.sorted.sam -O {}.sorted_marked.bam -M metrics.txt".format(sample_id, sample_id)
+    job_id = sbatch('markduplicates', command, dep=dep)
     return job_id
 
 
-def SNP(dep=''):
-    command = "bcftools call --ploidy 1 -mv -Ob {}.raw.bcf -o {}.bcf".format(sample_id, sample_id)
-    job_id = sbatch('SNP', command, dep=dep)
+def bamidx(dep=''):
+    command = "gatk BuildBamIndex -I {}.sorted_marked.bam".format(sample_id)"
+    job_id = sbatch('bamidx', command, dep=dep)
     return job_id
 
 
-def SNP_filter(dep=''):
-    command = "bcftools view {}.bcf | vcfutils.pl varFilter - > {}.vcf".format(sample_id, sample_id)
-    job_id = sbatch('SNP_filter', command, dep=dep)
+def variantcalling(dep=''):
+    command = "gatk HaplotypeCaller -R {}.fasta -I {}.sorted_marked.bam -o {}.vcf".format(ref, sample_id, sample_id)
+    job_id = sbatch('variantcalling', command, dep=dep)
     return job_id
+
 
 def Annotation(dep=''):
     command = "java -Xmx8g -jar snpEff.jar Candida_parapsilosis_cdc317 {}.vcf > {}.ann.vcf".format(sample_id, sample_id)
@@ -142,9 +145,9 @@ for file in files:
     alignment_jobid = alignment(trimmomatic_jobid)
     convert_jobid = convert(alignment_jobid)
     sort_jobid = sort(convert_jobid)
-    variant_jobid = variant(sort_jobid)
-    SNP_jobid = SNP(variant_jobid)
-    SNP_filter_jobid = SNP_filter(SNP_jobid)
-    Annotation_jobid = Annotation(SNP_filter_jobid)
+    markduplicates_jobid = markduplicates(sort_jobid)
+    bamidx_jobid = bamidx(markduplicates_jobid)
+    variantcalling_jobid = variantcalling(bamidx_jobid)
+    Annotation_jobid = Annotation(variantcalling_jobid)
 
 

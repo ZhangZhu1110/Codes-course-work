@@ -1,7 +1,8 @@
 # NGS analysis for Candida
 # Workload manager: Slurm
 # sbatch is used to submit a job script for later execution.
-# The script will typically contain one or more srun commands to launch parallel tasks.
+# Using dependencies in a pipeline allows us to maximize the resources we can use while minimizing the wait time to run our jobs. 
+# This also allows individual jobs to run in parallel (where possible), reducing our overall analysis time even further.
 
 # Data preparation:
 # 2 fastq files: forward and reverse
@@ -94,7 +95,7 @@ def variantcalling(dep=''):
     return job_id
 
 
-def Annotation(dep=''):
+def annotation(dep=''):
     command = "java -Xmx8g -jar snpEff.jar Candida_parapsilosis_cdc317 {}.vcf > {}.ann.vcf".format(sample_id, sample_id)
     job_id = sbatch('Annotation', command, dep=dep)
     return job_id
@@ -148,6 +149,6 @@ for file in files:
     markduplicates_jobid = markduplicates(sort_jobid)
     bamidx_jobid = bamidx(markduplicates_jobid)
     variantcalling_jobid = variantcalling(bamidx_jobid)
-    Annotation_jobid = Annotation(variantcalling_jobid)
+    annotation_jobid = annotation(variantcalling_jobid)
 
 

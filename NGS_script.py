@@ -31,8 +31,8 @@ def sbatch(job_name, command, time=4, mem=60, tasks=20, dep=''):
     return job_id
 
 
-def fastqc():
-    command = "fastqc {}_R1.fastq -o /home/zzhang082/C.para_fastqc".format(sample_id)
+def fastqc(strand):
+    command = "fastqc {}.fastq -o /home/zzhang082/C.para_fastqc".format(sample_id+'_'+strand)
     job_id = sbatch('fastqc', command)
     return job_id
 
@@ -131,7 +131,8 @@ for file in files:
     os.chdir("/home/zzhang082/C.para_result/{}".format(sample_id))
 
     # run the pipeline
-    fastqc_jobid = fastqc()
+    fastqc_jobid = fastqc(R1)
+    fastqc_jobid = fastqc(R2)
     trimmomatic_jobid = trimmomatic()
 
     # create directory to store assembled fasta file from spades

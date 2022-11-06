@@ -90,7 +90,7 @@ def bamidx(dep=''):
 
 
 def variantcalling(dep=''):
-    command = "gatk HaplotypeCaller -R {}.fasta -I {}.sorted_marked.bam -o {}.vcf".format(ref, sample_id, sample_id)
+    command = "gatk HaplotypeCaller -ploidy 2 -R {}.fasta -I {}.sorted_marked.bam -o {}.vcf".format(ref, sample_id, sample_id)
     job_id = sbatch('variantcalling', command, dep=dep)
     return job_id
 

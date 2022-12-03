@@ -1,14 +1,13 @@
-# NGS analysis for Candida
+# WGS analysis for Candida
 # Workload manager: Slurm
 # sbatch is used to submit a job script for later execution.
-# Using dependencies in a pipeline allows us to maximize the resources we can use while minimizing the wait time to run our jobs. 
-# This also allows individual jobs to run in parallel (where possible), reducing our overall analysis time even further.
+# The script will typically contain one or more srun commands to launch parallel tasks.
 
 # Data preparation:
 # 2 fastq files: forward and reverse
 # a reference fasta file for alignment
 
-# The pipeline contains following softwares: fastqc, trimmomatic, spades, quast, bwa, gatk and snpEff
+# The pipeline contains following software: fastqc, trimmomatic, spades, quast, bwa, samtools，GATK and snpEff
 # The outcome are stored in 4 directories:
 # fastqc results -> C.para_fastqc
 # quast results -> C.para_quast
@@ -31,8 +30,8 @@ def sbatch(job_name, command, time=4, mem=60, tasks=20, dep=''):
     return job_id
 
 
-def fastqc(strand):
-    command = "fastqc {}.fastq -o /home/zzhang082/C.para_fastqc".format(sample_id+'_'+strand)
+def fastqc():
+    command = "fastqc {}_R1.fastq -o /home/zzhang082/C.para_fastqc".format(sample_id)
     job_id = sbatch('fastqc', command)
     return job_id
 
@@ -58,7 +57,6 @@ def quast(dep=''):
 
 
 def alignment(dep=''):
-    # GATK requires readgroup information
     rg = '@RG\tID:group_n\tLB:library_n\tPL:illumina\tPU:unit1\tSM:sample_n'
     command = "bwa mem -R {} -t 8 {} {}_R1_paired.fastq.gz {}_R2_paired.fastq.gz > {}.sam".format(rg, ref, sample_id, sample_id, sample_id)
     job_id = sbatch('align', command, time=8, mem=120, dep=dep)
@@ -77,25 +75,25 @@ def sort(dep=''):
     return job_id
 
 
-def markduplicates(dep=''):
-    command = "gatk MarkDuplicates -I {}.sorted.sam -O {}.sorted_marked.bam -M metrics.txt".format(sample_id, sample_id)
-    job_id = sbatch('markduplicates', command, dep=dep)
+def mark_duplicates(dep=''):
+    command = "gatk MarkDuplicates -I {}.sorted.bam -O {}.sorted_marked.bam -M metrics.txt".format(sample_id, sample_id)
+    job_id = sbatch('mark_duplicates', command, dep=dep)
     return job_id
 
 
-def bamidx(dep=''):
-    command = "gatk BuildBamIndex -I {}.sorted_marked.bam".format(sample_id)"
-    job_id = sbatch('bamidx', command, dep=dep)
+def index_bam(dep=''):
+    command = "gatk BuildBamIndex -I {}.sorted_marked.bam".format(sample_id)
+    job_id - sbatch('index_bam', command, dep=dep)
     return job_id
 
 
-def variantcalling(dep=''):
-    command = "gatk HaplotypeCaller -ploidy 2 -R {}.fasta -I {}.sorted_marked.bam -o {}.vcf".format(ref, sample_id, sample_id)
-    job_id = sbatch('variantcalling', command, dep=dep)
+def variant(dep=''):
+    command = "gatk HaplotypeCaller -ploidy 2 -R {} -I {}.sorted_marked.bam -o {}.vcf".format(ref, sample_id, sample_id)
+    job_id = sbatch('variant', command, dep=dep)
     return job_id
 
 
-def annotation(dep=''):
+def Annotation(dep=''):
     command = "java -Xmx8g -jar snpEff.jar Candida_parapsilosis_cdc317 {}.vcf > {}.ann.vcf".format(sample_id, sample_id)
     job_id = sbatch('Annotation', command, dep=dep)
     return job_id
@@ -131,8 +129,7 @@ for file in files:
     os.chdir("/home/zzhang082/C.para_result/{}".format(sample_id))
 
     # run the pipeline
-    fastqc_jobid = fastqc(R1)
-    fastqc_jobid = fastqc(R2)
+    fastqc_jobid = fastqc()
     trimmomatic_jobid = trimmomatic()
 
     # create directory to store assembled fasta file from spades
@@ -147,9 +144,12 @@ for file in files:
     alignment_jobid = alignment(trimmomatic_jobid)
     convert_jobid = convert(alignment_jobid)
     sort_jobid = sort(convert_jobid)
-    markduplicates_jobid = markduplicates(sort_jobid)
-    bamidx_jobid = bamidx(markduplicates_jobid)
-    variantcalling_jobid = variantcalling(bamidx_jobid)
-    annotation_jobid = annotation(variantcalling_jobid)
+    mark_duplicates_jobid = mark_duplicates(sort_jobid)
+    index_bam_jobid = index_bam(mark_duplicates_jobid)
+    variant_jobid = variant(index_bam_jobid)
+    SNP_jobid = SNP(variant_jobid)
+    Annotation_jobid = Annotation(SNP_jobid)
+
+
 
 
